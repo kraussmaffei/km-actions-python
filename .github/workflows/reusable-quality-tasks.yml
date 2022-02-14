@@ -16,6 +16,22 @@ on:
         required: false
         type: string
         default: "'test*.py'"
+      aws-account-id:
+        description: "The aws account id used for login."
+        type: string
+        required: true
+      aws-region:
+        description: "AWS region of the codeartifact domain."
+        type: string
+        required: true
+      codeartifact-domain:
+        description: "Domain of the aws codeartifact repository."
+        type: string
+        required: true
+      codeartifact-repository:
+        description: "The aws codeartifact repository."
+        type: string
+        required: true
 
     secrets:
       aws-access-key-id:
@@ -24,23 +40,8 @@ on:
       aws-secret-access-key:
         description: "The aws secret access key used for login."
         required: true
-      aws-account-id:
-        description: "The aws account id used for login."
-        required: true
       role-external-id:
         description: "The external ID of the role to assume."
-        required: true
-      role-to-assume:
-        description: "The role to assume."
-        required: true
-      aws-region:
-        description: "AWS region of the codeartifact domain."
-        required: true
-      codeartifact-domain:
-        description: "Domain of the aws codeartifact repository."
-        required: true
-      codeartifact-repository:
-        description: "The aws codeartifact repository."
         required: true
       badge-uploader-api-key:
         description: "The api key for the badge uploader to use."
@@ -91,20 +92,20 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.aws-access-key-id }}
           aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
-          role-to-assume: ${{ secrets.role-to-assume }}
+          role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/PythonPackageIndexCodeartifactReadWrite
           role-external-id: ${{ secrets.role-external-id }}
           role-skip-session-tagging: true
           mask-aws-account-id: false
-          aws-region: ${{ secrets.aws-region }}
+          aws-region: ${{ inputs.aws-region }}
 
       - name: "CodeArtifact login (pip)"
         uses: kraussmaffei/aws-tools-login@main
         with:
-          account: ${{ secrets.aws-account-id }}
-          region: ${{ secrets.aws-region }}
+          account: ${{ inputs.aws-account-id }}
+          region: ${{ inputs.aws-region }}
           aws-tool: "codeartifact-pip"
-          codeartifact-domain: ${{ secrets.codeartifact-domain }}
-          codeartifact-repository: ${{ secrets.codeartifact-repository }}
+          codeartifact-domain: ${{ inputs.codeartifact-domain }}
+          codeartifact-repository: ${{ inputs.codeartifact-repository }}
 
       - name: Install required tools
         shell: bash
@@ -131,7 +132,7 @@ jobs:
 
       - name: SonarCloud Scan
         if: ${{ steps.use-sonarcloud.outputs.use-sonarcloud == 'true'}}
-        uses: sonarsource/sonarcloud-github-action@master
+        uses: sonarsource/sonarcloud-github-action@v1.6
         env:
           GITHUB_TOKEN: ${{ secrets.ci-token }}
           SONAR_TOKEN: ${{ secrets.sonar-token }}

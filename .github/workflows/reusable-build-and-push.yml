@@ -1,0 +1,111 @@
+name: Build and Push Python Package
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "The python version to use for executing the quality tasks."
+        required: false
+        type: string
+        default: "3.8"
+      aws-account-id:
+        description: "The aws account id used for login."
+        type: string
+        required: true
+      aws-region:
+        description: "AWS region of the codeartifact domain."
+        type: string
+        required: true     
+      codeartifact-domain:
+        description: "Domain of the aws codeartifact repository."
+        type: string
+        required: true
+      codeartifact-repository:
+        description: "The aws codeartifact repository."
+        type: string
+        required: true
+    outputs:
+      published-python-package-version:
+        description: "The version string of the published package."
+        value: ${{ jobs.publish-python-package.outputs.published-python-package-version }}
+    secrets:
+      aws-access-key-id:
+        description: "The aws access key id used for login."
+        required: true
+      aws-secret-access-key:
+        description: "The aws secret access key used for login."
+        required: true
+      role-external-id:
+        description: "The external ID of the role to assume."
+        required: true
+      user-name:
+        description: "User name to use for commiting code changes."
+        required: true
+      user-email:
+        description: "User email to use for commiting code changes."
+        required: true
+      user-token:
+        description: "Token to be used to checkout the sources."
+        required: true
+
+jobs:
+  publish-python-package:
+    name: "Publish Python Package"
+    runs-on: ubuntu-20.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+    outputs:
+      published-python-package-version: ${{ steps.publish-python-package.outputs.published-release-version }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.user-token }}
+
+      - name: "Setup Python"
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: "Configure AWS Credentials"
+        uses: kraussmaffei/actions/configure-aws-credentials@main
+        with:
+          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          aws-access-key-id: ${{ secrets.aws-access-key-id }}
+          aws-region: ${{ inputs.aws-region }}
+          mask-aws-account-id: false
+          role-external-id: ${{ secrets.role-external-id }}
+          role-skip-session-tagging: true
+          role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/PythonPackageIndexCodeartifactReadWrite
+
+      - name: "CodeArtifact login (pip)"
+        uses: kraussmaffei/aws-tools-login@main
+        with:
+          account: ${{ inputs.aws-account-id }}
+          region: ${{ inputs.aws-region }}
+          aws-tool: "codeartifact-pip"
+          codeartifact-domain: ${{ inputs.codeartifact-domain }}
+          codeartifact-repository: ${{ inputs.codeartifact-repository }}
+
+      - name: "CodeArtifact login (twine)"
+        uses: kraussmaffei/aws-tools-login@main
+        with:
+          account: ${{ inputs.aws-account-id }}
+          region: ${{ inputs.aws-region }}
+          aws-tool: "codeartifact-twine"
+          codeartifact-domain: ${{ inputs.codeartifact-domain }}
+          codeartifact-repository: ${{ inputs.codeartifact-repository }}
+
+      - name: Build and publish python package...
+        id: build-and-push
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.user-token }}
+        run: |
+          echo Configuring git...
+          git config --global user.name ${{ secrets.user-name }}
+          git config --global user.email ${{ secrets.user-email }}
+
+          echo Installing required tools...
+          pip install python-semantic-release poetry
+
+          echo "::set-output name=published-release-version::$(semantic-release print-version)"
+          semantic-release publish

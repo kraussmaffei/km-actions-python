@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-20.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
     outputs:
-      published-python-package-version: ${{ steps.publish-python-package.outputs.published-release-version }}
+      published-python-package-version: ${{ steps.build-and-push.outputs.published-release-version }}
     steps:
       - uses: actions/checkout@v2
         with:

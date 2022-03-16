@@ -4,9 +4,8 @@ on:
     inputs:
       python-version:
         description: "The python version to use for executing the quality tasks."
-        required: false
+        required: true
         type: string
-        default: "3.8"
       python-package-path:
         description: "Path of the python package under quality test."
         required: true
@@ -32,6 +31,11 @@ on:
         description: "The aws codeartifact repository."
         type: string
         required: true
+      use-tox:
+        description: "Use tox to run quality tasks"
+        required: false
+        type: string
+        default: false
 
     secrets:
       aws-access-key-id:
@@ -43,12 +47,6 @@ on:
       role-external-id:
         description: "The external ID of the role to assume."
         required: true
-      badge-uploader-api-key:
-        description: "The api key for the badge uploader to use."
-        required: false
-      badge-uploader-api-url:
-        description: "The url for the badge uploader to use."
-        required: false
       ci-token:
         description: "The ci token to use."
         required: false
@@ -70,42 +68,19 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [format]
     timeout-minutes: 60
+    if: ${{ inputs.use-tox == 'false'}}
     steps:
       - uses: actions/checkout@v2
 
-      - name: Determine if Sonarcloud is present
-        id: use-sonarcloud
-        run: |
-          echo "::set-output name=use-sonarcloud::false"
-          if [ ! -z ${{ secrets.sonar-token }} ]; then
-            echo "Use sonarcloud"
-            echo "::set-output name=use-sonarcloud::true"
-          else
-            echo "Do not use sonarcloud"
-          fi;
-
-      - name: "Setup Python"
-        uses: actions/setup-python@v2
+      - name: "Setup Environment"
+        uses: ./.github/composites/setup-environment/
         with:
           python-version: ${{ inputs.python-version }}
-
-      - name: "Configure AWS Credentials"
-        uses: kraussmaffei/actions/configure-aws-credentials@main
-        with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
-          role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/PythonPackageIndexCodeartifactReadWrite
-          role-external-id: ${{ secrets.role-external-id }}
-          role-skip-session-tagging: true
-          mask-aws-account-id: false
+          aws-access-key-id: ${{ inputs.aws-access-key-id }}
+          aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+          aws-account-id: ${{ inputs.aws-account-id }}
+          role-external-id: ${{ inputs.role-external-id }}
           aws-region: ${{ inputs.aws-region }}
-
-      - name: "CodeArtifact login (pip)"
-        uses: kraussmaffei/aws-tools-login@main
-        with:
-          account: ${{ inputs.aws-account-id }}
-          region: ${{ inputs.aws-region }}
-          aws-tool: "codeartifact-pip"
           codeartifact-domain: ${{ inputs.codeartifact-domain }}
           codeartifact-repository: ${{ inputs.codeartifact-repository }}
 
@@ -139,16 +114,44 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ci-token }}
           SONAR_TOKEN: ${{ secrets.sonar-token }}
 
-      - name: "Push coverage"
-        if: ${{ steps.use-sonarcloud.outputs.use-sonarcloud == 'false' }}
-        id: git-badge-uploader
-        uses: kraussmaffei/git-badge-uploader@main
-        with:
-          total-coverage: ${{ steps.coverage-calculator.outputs.total-coverage }}
-          aws-api-key: ${{ secrets.badge-uploader-api-key }}
-          aws-api-url: ${{ secrets.badge-uploader-api-url }}
+  test-using-tox:
+    name: "Test Python Package using tox"
+    runs-on: ubuntu-20.04
+    needs: [format]
+    timeout-minutes: 60
+    if: ${{ inputs.use-tox == 'true'}}
+    env:
+      PYTHON_PACKAGE_PATH: ${{ inputs.python-package-path }}
+      UNIT_TEST_FILE_PATTERN: ${{ inputs.unit-test-file-pattern }}
+      COVERAGE_REPORT_OUTPUT: "./coverage-reports/coverage.xml"
+    steps:
+      - uses: actions/checkout@v2
 
-      - name: "Coverage url"
-        if: ${{ steps.use-sonarcloud.outputs.use-sonarcloud == 'false' }}
+      - name: "Setup Environment"
+        uses: ./.github/composites/setup-environment/
+        with:
+          python-version: ${{ inputs.python-version }}
+          aws-access-key-id: ${{ inputs.aws-access-key-id }}
+          aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+          aws-account-id: ${{ inputs.aws-account-id }}
+          role-external-id: ${{ inputs.role-external-id }}
+          aws-region: ${{ inputs.aws-region }}
+          codeartifact-domain: ${{ inputs.codeartifact-domain }}
+          codeartifact-repository: ${{ inputs.codeartifact-repository }}
+
+      - name: Install required tools
         shell: bash
-        run: echo ${{ steps.git-badge-uploader.outputs.url }}
+        run: |
+          pip install tox
+
+      - name: Run tox
+        shell: bash
+        run: |
+          tox
+
+      - name: SonarCloud Scan
+        if: ${{ steps.use-sonarcloud.outputs.use-sonarcloud == 'true'}}
+        uses: sonarsource/sonarcloud-github-action@v1.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.ci-token }}
+          SONAR_TOKEN: ${{ secrets.sonar-token }}

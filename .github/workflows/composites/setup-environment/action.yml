@@ -1,0 +1,57 @@
+
+name: "Setup Environment"
+description: "Sets up the runner environment"
+inputs:
+    python-version:
+      description: "The python version to use."
+      required: true
+    aws-access-key-id:
+      description: "The aws access key id to use"
+      required: true
+    aws-secret-access-key:
+      description: "The aws secret access key to use"
+      required: true
+    aws-account-id:
+      description: "The aws account id to use"
+      required: true
+    role-external-id:
+      description: "The role external id to use"
+      required: true
+    aws-region:
+      description: "The aws region to use"
+      required: true
+    codeartifact-domain:
+      description: "The codeartifact domain name to use"
+      required: true
+    codeartifact-repository:
+      description: "The codeartifact repository name to use"
+      required: true
+
+
+runs:
+  using: composite
+  steps:
+    - name: "Setup Python"
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: "Configure AWS Credentials"
+      uses: kraussmaffei/actions/configure-aws-credentials@main
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/PythonPackageIndexCodeartifactReadWrite
+        role-external-id: ${{ inputs.role-external-id }}
+        role-skip-session-tagging: true
+        mask-aws-account-id: false
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: "CodeArtifact login (pip)"
+      uses: kraussmaffei/aws-tools-login@main
+      with:
+        account: ${{ inputs.aws-account-id }}
+        region: ${{ inputs.aws-region }}
+        aws-tool: "codeartifact-pip"
+        codeartifact-domain: ${{ inputs.codeartifact-domain }}
+        codeartifact-repository: ${{ inputs.codeartifact-repository }}

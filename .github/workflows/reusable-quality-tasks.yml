@@ -68,7 +68,6 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [format]
     timeout-minutes: 60
-    if: ${{ inputs.use-tox == 'false'}}
     steps:
       - uses: actions/checkout@v2
 
@@ -97,15 +96,11 @@ jobs:
           codeartifact-domain: ${{ inputs.codeartifact-domain }}
           codeartifact-repository: ${{ inputs.codeartifact-repository }}
 
-      - name: Install required tools
-        shell: bash
-        run: |
-          pip install coverage flake8
-          pip install .[test-dependencies]
-
       - name: Running flake8 linter...
         shell: bash
         run: |
+          pip install flake8
+
           # stop the build if there are Python syntax errors or undefined names
           flake8 ./${{ inputs.python-package-path }} --count --select=E9,F63,F7,F82 --builtins="_" --show-source --statistics
 
@@ -113,70 +108,25 @@ jobs:
           flake8 ./${{ inputs.python-package-path }} --count --exit-zero --max-complexity=10 --builtins="_" --max-line-length=127 --statistics
 
       - name: Running coverage calculation...
-        id: coverage-calculator
         shell: bash
-        run: |
-          coverage run --source=${{ inputs.python-package-path }} -m unittest discover -s tests -p ${{ inputs.unit-test-file-pattern }}
-          echo "::set-output name=total-coverage::$(coverage report -m | grep -o -E 'TOTAL.+ ([0-9]{1,3}%)' | grep -o -E '([0-9]{1,3}%)' | grep -o -E '([0-9]+)')"
-          coverage xml -o ./coverage-reports/coverage.xml
-
-      - name: SonarCloud Scan
-        if: ${{ steps.use-sonarcloud.outputs.use-sonarcloud == 'true'}}
-        uses: sonarsource/sonarcloud-github-action@v1.6
         env:
-          GITHUB_TOKEN: ${{ secrets.ci-token }}
-          SONAR_TOKEN: ${{ secrets.sonar-token }}
-
-  test-using-tox:
-    name: "Test Python Package using tox"
-    runs-on: ubuntu-20.04
-    needs: [format]
-    timeout-minutes: 60
-    if: ${{ inputs.use-tox == 'true'}}
-    env:
-      PYTHON_PACKAGE_PATH: ${{ inputs.python-package-path }}
-      UNIT_TEST_FILE_PATTERN: ${{ inputs.unit-test-file-pattern }}
-      COVERAGE_REPORT_OUTPUT: "./coverage-reports/coverage.xml"
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: "Setup Python"
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ inputs.python-version }}
-
-      - name: "Configure AWS Credentials"
-        uses: kraussmaffei/actions/configure-aws-credentials@main
-        with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
-          role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/PythonPackageIndexCodeartifactReadWrite
-          role-external-id: ${{ secrets.role-external-id }}
-          role-skip-session-tagging: true
-          mask-aws-account-id: false
-          aws-region: ${{ inputs.aws-region }}
-
-      - name: "CodeArtifact login (pip)"
-        uses: kraussmaffei/aws-tools-login@main
-        with:
-          account: ${{ inputs.aws-account-id }}
-          region: ${{ inputs.aws-region }}
-          aws-tool: "codeartifact-pip"
-          codeartifact-domain: ${{ inputs.codeartifact-domain }}
-          codeartifact-repository: ${{ inputs.codeartifact-repository }}
-
-      - name: Install required tools
-        shell: bash
+          PYTHON_PACKAGE_PATH: ${{ inputs.python-package-path }}
+          UNIT_TEST_FILE_PATTERN: ${{ inputs.unit-test-file-pattern }}
+          COVERAGE_REPORT_OUTPUT: "./coverage-reports/coverage.xml"
         run: |
-          pip install tox
-
-      - name: Run tox
-        shell: bash
-        run: |
-          tox
+          pip install coverage
+          if [[ "${{ inputs.use-tox }}" == "true" ]]; then
+              echo "Using tox for running unit tests..."
+              pip install tox
+              tox
+          else
+              echo "Using github runner for running unit tests..."
+              pip install .[test-dependencies]
+              coverage run --source=${{ env.PYTHON_PACKAGE_PATH }} -m unittest discover -s tests -p ${{ env.UNIT_TEST_FILE_PATTERN }}
+          fi
+          coverage xml -o ${{ env.COVERAGE_REPORT_OUTPUT }}
 
       - name: SonarCloud Scan
-        if: ${{ steps.use-sonarcloud.outputs.use-sonarcloud == 'true'}}
         uses: sonarsource/sonarcloud-github-action@v1.6
         env:
           GITHUB_TOKEN: ${{ secrets.ci-token }}

@@ -4,8 +4,9 @@ on:
     inputs:
       python-version:
         description: "The python version to use for executing the quality tasks."
-        required: true
+        required: false
         type: string
+        default: "3.8"
       python-package-path:
         description: "Path of the python package under quality test."
         required: true
@@ -18,19 +19,23 @@ on:
       aws-account-id:
         description: "The aws account id used for login."
         type: string
-        required: true
+        required: false
+        default: "304998364617"
       aws-region:
         description: "AWS region of the codeartifact domain."
         type: string
-        required: true
+        required: false
+        default: "eu-central-1"
       codeartifact-domain:
         description: "Domain of the aws codeartifact repository."
         type: string
-        required: true
+        required: false
+        default: "kraussmaffei"
       codeartifact-repository:
         description: "The aws codeartifact repository."
         type: string
-        required: true
+        required: false
+        default: "dss"
       use-tox:
         description: "Use tox to run quality tasks"
         required: false
@@ -60,16 +65,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: psf/black@stable
 
   test:
     name: "Test Python Package"
     runs-on: ubuntu-20.04
     needs: [format]
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: "Setup Python"
         uses: actions/setup-python@v2
@@ -129,5 +134,5 @@ jobs:
       - name: SonarCloud Scan
         uses: sonarsource/sonarcloud-github-action@v1.6
         env:
-          GITHUB_TOKEN: ${{ secrets.ci-token }}
+          GITHUB_TOKEN: ${{ secrets.ci-token || github.token }}
           SONAR_TOKEN: ${{ secrets.sonar-token }}

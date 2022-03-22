@@ -10,19 +10,37 @@ on:
       aws-account-id:
         description: "The aws account id used for login."
         type: string
-        required: true
+        required: false
+        default: "304998364617"
       aws-region:
         description: "AWS region of the codeartifact domain."
         type: string
-        required: true     
+        required: false
+        default: "eu-central-1"
       codeartifact-domain:
         description: "Domain of the aws codeartifact repository."
         type: string
-        required: true
+        required: false
+        default: "kraussmaffei"
       codeartifact-repository:
         description: "The aws codeartifact repository."
         type: string
-        required: true
+        required: false
+        default: "dss"
+      ref:
+        description: "The git ref to checkout."
+        type: string
+        required: false
+      user-name:
+        description: "User name to use for commiting code changes."
+        type: string
+        required: false
+        default: "github-actions[bot]"
+      user-email:
+        description: "User email to use for commiting code changes."
+        type: string
+        required: false
+        default: "github-actions[bot]@users.noreply.github.com"
     outputs:
       published-python-package-version:
         description: "The version string of the published package."
@@ -37,28 +55,30 @@ on:
       role-external-id:
         description: "The external ID of the role to assume."
         required: true
-      user-name:
-        description: "User name to use for commiting code changes."
-        required: true
-      user-email:
-        description: "User email to use for commiting code changes."
-        required: true
       user-token:
         description: "Token to be used to checkout the sources."
-        required: true
+        required: false
+      user-name:
+        description: "Deprecated."
+        required: false
+      user-email:
+        description: "Deprecated."
+        required: false
 
 jobs:
   publish-python-package:
     name: "Publish Python Package"
     runs-on: ubuntu-20.04
+    timeout-minutes: 10
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
     outputs:
       published-python-package-version: ${{ steps.build-and-push.outputs.published-release-version }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.user-token }}
+          token: ${{ secrets.user-token || github.token }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: "Setup Python"
         uses: actions/setup-python@v2
@@ -98,11 +118,11 @@ jobs:
         id: build-and-push
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.user-token }}
+          GH_TOKEN: ${{ secrets.user-token || github.token }}
         run: |
           echo Configuring git...
-          git config --global user.name ${{ secrets.user-name }}
-          git config --global user.email ${{ secrets.user-email }}
+          git config --global user.name ${{ inputs.user-name }}
+          git config --global user.email ${{ inputs.user-email }}
 
           echo Installing required tools...
           pip install python-semantic-release poetry

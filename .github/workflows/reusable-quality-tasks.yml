@@ -36,6 +36,11 @@ on:
         type: string
         required: false
         default: "dss"
+      additional-script-path:
+        description: "File path to the script which shall be additionally executed."
+        type: string
+        required: false
+        default: ""
       use-tox:
         description: "Use tox to run quality tasks"
         required: false
@@ -80,6 +85,13 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ inputs.python-version }}
+
+      - name: "Run additional script"
+        if: ${{ inputs.additional-script-path != '' }}
+        shell: bash
+        run: |
+          chmod +x ${{ inputs.additional-script-path }}
+          ${{ inputs.additional-script-path }}
 
       - name: "Configure AWS Credentials"
         uses: kraussmaffei/actions/configure-aws-credentials@main

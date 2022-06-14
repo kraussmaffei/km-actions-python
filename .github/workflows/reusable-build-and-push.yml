@@ -72,7 +72,7 @@ jobs:
     timeout-minutes: 10
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
     outputs:
-      published-python-package-version: ${{ steps.build-and-push.outputs.published-release-version }}
+      published-python-package-version: ${{ steps.get-next-version-information.outputs.upcoming-release-version }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -113,19 +113,24 @@ jobs:
           aws-tool: "codeartifact-twine"
           codeartifact-domain: ${{ inputs.codeartifact-domain }}
           codeartifact-repository: ${{ inputs.codeartifact-repository }}
+          
+      - name: Install python tools
+        run: |
+          pip install python-semantic-release poetry
+        
+      - name: Get next version information
+        id: get-next-version-information
+        shell: bash
+        run: |
+          echo "::set-output name=upcoming-release-version::$(semantic-release print-version)"
 
       - name: Build and publish python package...
-        id: build-and-push
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.user-token || github.token }}
+          UPCOMING_VERSION: ${{ steps.get-next-version-information.outputs.upcoming-release-version }}
         run: |
           echo Configuring git...
           git config --global user.name ${{ inputs.user-name }}
           git config --global user.email ${{ inputs.user-email }}
-
-          echo Installing required tools...
-          pip install python-semantic-release poetry
-
-          echo "::set-output name=published-release-version::$(semantic-release print-version)"
           semantic-release publish

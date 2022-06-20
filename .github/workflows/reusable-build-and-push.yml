@@ -116,7 +116,7 @@ jobs:
           
       - name: Install python tools
         run: |
-          pip install python-semantic-release poetry
+          pip install python-semantic-release==7.29.1 poetry
         
       - name: Get next version information
         id: get-next-version-information
